@@ -71,7 +71,9 @@ def handle_chat(user_id: str, message: str) -> str:
         language = detect_language(message)
 
         prompt = (
-            f"Respond ONLY in {language}.\n\n"
+            f"IMPORTANT: You MUST respond COMPLETELY and ENTIRELY in {language} language only. "
+            f"Do NOT mix languages. Do NOT switch languages mid-response. "
+            f"Every single word in your response must be in {language}.\n\n"
             f"User query:\n{message}"
         )
 
