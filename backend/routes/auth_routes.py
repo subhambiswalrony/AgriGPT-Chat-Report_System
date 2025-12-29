@@ -7,6 +7,15 @@ from utils.config import JWT_SECRET_KEY
 auth_bp = Blueprint("auth", __name__, url_prefix="/api")
 
 
+def verify_token(token):
+    """Verify JWT token and return payload if valid, None otherwise"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except Exception:
+        return None
+
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
