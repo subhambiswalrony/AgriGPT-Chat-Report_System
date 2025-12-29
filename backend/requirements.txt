@@ -13,3 +13,5 @@ numpy
 scipy
 sounddevice
 torch
+weasyprint
+langdetect
