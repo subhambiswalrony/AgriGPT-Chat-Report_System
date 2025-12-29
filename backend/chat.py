@@ -92,7 +92,10 @@ def handle_chat(user_id: str, message: str) -> str:
         else:
             response_type = "ai"
 
-    save_chat(user_id, message, response, response_type, language)
+    # Only save chat history for authenticated users (not trial users)
+    if user_id != "trial_user":
+        save_chat(user_id, message, response, response_type, language)
+    
     return response
 
 
