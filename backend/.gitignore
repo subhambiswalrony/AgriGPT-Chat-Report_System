@@ -43,3 +43,6 @@ uploads/*
 
 # Logs
 *.log
+
+# Database Testing
+test_db.py
