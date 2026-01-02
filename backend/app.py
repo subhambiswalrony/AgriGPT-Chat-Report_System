@@ -7,7 +7,12 @@ from voice import handle_voice
 from report import generate_farming_report
 
 # Services
-from services.db_service import get_chat_history
+from services.db_service import (
+    get_chat_history, 
+    get_chat_sessions, 
+    get_chat_by_id,
+    delete_chat_session
+)
 
 # Auth
 from routes.auth_routes import auth_bp, token_required, verify_token
@@ -38,15 +43,71 @@ def chat_api():
 
         data = request.json
         message = data.get("message")
+        chat_id = data.get("chat_id")  # Optional: for continuing existing chat
 
         if not message:
             return jsonify({"error": "Message is required"}), 400
 
-        reply = handle_chat(user_id, message)
-        return jsonify({"reply": reply})
+        result = handle_chat(user_id, message, chat_id)
+        return jsonify(result)
 
     except Exception as e:
         print(f"❌ Error in chat_api: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+# -------------------- CHAT SESSIONS API --------------------
+@app.route("/api/chats", methods=["GET"])
+@token_required
+def get_chats():
+    """Get all chat sessions for authenticated user"""
+    try:
+        user_id = request.current_user["user_id"]
+        sessions = get_chat_sessions(user_id)
+        return jsonify(sessions)
+
+    except Exception as e:
+        print(f"❌ Error in get_chats: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/api/chats/<chat_id>", methods=["GET"])
+@token_required
+def get_chat(chat_id):
+    """Get full chat history for a specific chat session"""
+    try:
+        user_id = request.current_user["user_id"]
+        chat_data = get_chat_by_id(chat_id)
+        
+        if not chat_data:
+            return jsonify({"error": "Chat not found"}), 404
+        
+        # Verify user owns this chat
+        if chat_data["session"]["user_id"] != user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+        
+        return jsonify(chat_data)
+
+    except Exception as e:
+        print(f"❌ Error in get_chat: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/api/chats/<chat_id>", methods=["DELETE"])
+@token_required
+def delete_chat(chat_id):
+    """Delete a chat session"""
+    try:
+        user_id = request.current_user["user_id"]
+        success = delete_chat_session(chat_id, user_id)
+        
+        if success:
+            return jsonify({"message": "Chat deleted successfully"})
+        else:
+            return jsonify({"error": "Chat not found"}), 404
+
+    except Exception as e:
+        print(f"❌ Error in delete_chat: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -139,4 +200,7 @@ def report_history():
 
 # -------------------- RUN SERVER --------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        debug=True,
+        use_reloader=False
+    )
