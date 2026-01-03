@@ -2,11 +2,11 @@ import jwt, bcrypt
 import random
 from datetime import datetime, timedelta, timezone
 from utils.config import JWT_SECRET_KEY, JWT_EXPIRY_HOURS
-from services.db_service import user_collection, chat_collection, report_collection
+from services.db_service import user_collection, chat_collection, report_collection, db
 from bson import ObjectId
 
-# In-memory OTP storage (for demo purposes - in production, use Redis or database)
-otp_storage = {}
+# Import the proper OTP service functions
+from services.otp_service import create_and_send_otp as otp_create_and_send
 
 
 def signup_user(email, password, name):
@@ -180,27 +180,15 @@ def send_otp_email(email):
         if not user:
             raise Exception("No account found with this email")
         
-        # Generate 6-digit OTP
-        otp = str(random.randint(100000, 999999))
-        
-        # Store OTP with expiration (10 minutes)
-        expiration = datetime.now(timezone.utc) + timedelta(minutes=10)
-        otp_storage[email] = {
-            "otp": otp,
-            "expiration": expiration
-        }
-        
-        print(f"✓ OTP generated for {email}: {otp} (expires at {expiration})")
-        
-        # In production, send OTP via email service (SendGrid, AWS SES, etc.)
-        # For demo, just log it
-        print(f"📧 Email would be sent to: {email}")
-        print(f"🔐 OTP Code: {otp}")
+        # Use the proper database-backed OTP service
+        result = otp_create_and_send(email, "password_reset")
         
         return {
             "success": True,
             "message": "OTP sent successfully to your email",
-            "email": email
+            "email": email,
+            "otp_id": result["otp_id"],
+            "expires_at": result["expires_at"].isoformat()
         }
     except Exception as e:
         raise Exception(str(e))
@@ -209,25 +197,31 @@ def send_otp_email(email):
 def verify_otp_code(email, otp):
     """Verify OTP code"""
     try:
-        # Check if OTP exists for this email
-        if email not in otp_storage:
-            raise Exception("No OTP found for this email. Please request a new one.")
+        print(f"🔍 Verifying OTP for email: {email}")
         
-        stored_data = otp_storage[email]
-        
-        # Check if OTP has expired
-        if datetime.now(timezone.utc) > stored_data["expiration"]:
-            del otp_storage[email]
-            raise Exception("OTP has expired. Please request a new one.")
-        
-        # Verify OTP
-        if stored_data["otp"] != otp:
+        # Find OTP in database
+        record = db.otp_verifications.find_one({
+            "email": email,
+            "otp": otp,
+            "verified": False
+        })
+
+        if not record:
+            print(f"❌ No matching OTP found for {email}")
             raise Exception("Invalid OTP. Please try again.")
+
+        # Check if OTP has expired
+        if record["expires_at"] < datetime.utcnow():
+            print(f"⏰ OTP expired for {email}")
+            raise Exception("OTP has expired. Please request a new one.")
+
+        # Mark OTP as verified
+        db.otp_verifications.update_one(
+            {"_id": record["_id"]},
+            {"$set": {"verified": True}}
+        )
         
-        # OTP is valid - remove it from storage
-        del otp_storage[email]
-        
-        print(f"✓ OTP verified successfully for {email}")
+        print(f"✅ OTP verified successfully for {email}")
         
         return {
             "success": True,
